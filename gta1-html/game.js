@@ -1,5 +1,8 @@
 // GTA 1 Style Driving - First Person View
 // Pseudo-3D racing game using 2D canvas
+// VERSION 2.0 - Fixed acceleration and steering
+
+const VERSION = '2.0';
 
 // Canvas setup
 const canvas = document.getElementById('gameCanvas');
@@ -31,13 +34,13 @@ const player = {
     x: 0,                 // Player x offset from center (-1 to 1)
     z: 0,                 // Player position along the road
     speed: 0,             // Current speed
-    maxSpeed: 500,        // Faster max speed
-    accel: 150,           // Much faster acceleration
-    braking: 200,         // Faster braking
-    decel: 30,            // Slower natural deceleration
-    offRoadDecel: 80,
+    maxSpeed: 800,        // Very fast max speed
+    accel: 400,           // Super fast acceleration
+    braking: 500,         // Super fast braking
+    decel: 50,            // Natural deceleration
+    offRoadDecel: 100,
     offRoadLimit: 0.3,
-    turnSpeed: 5          // Faster turning
+    turnSpeed: 8          // Very fast turning
 };
 
 // Road segments
@@ -244,7 +247,7 @@ function drawCar() {
 
 // Draw UI
 function drawUI() {
-    const speedMPH = Math.round(player.speed / player.maxSpeed * 120);
+    const speedMPH = Math.round(player.speed / player.maxSpeed * 200);
     
     // Speed display
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -257,6 +260,13 @@ function drawUI() {
     ctx.fillStyle = '#66ff66';
     ctx.font = 'bold 24px monospace';
     ctx.fillText(speedMPH + ' mph', 20, 54);
+    
+    // Version display (to confirm latest version)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(canvas.width - 80, 10, 70, 25);
+    ctx.fillStyle = '#ffff00';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('v' + VERSION, canvas.width - 70, 28);
     
     // Handbrake indicator
     if (keys.space) {
