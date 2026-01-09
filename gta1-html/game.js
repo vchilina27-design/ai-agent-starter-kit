@@ -20,8 +20,8 @@ const road = {
     segmentLength: 200,   // Length of each road segment
     rumbleLength: 3,      // Number of segments per rumble strip
     lanes: 3,             // Number of lanes
-    drawDistance: 100,    // How many segments to draw
-    fogDensity: 5,        // Fog density
+    drawDistance: 300,    // How many segments to draw (increased)
+    fogDensity: 0,        // No fog for clearer view
     cameraHeight: 1000,   // Camera height above road
     cameraDepth: 0.84     // Camera depth (field of view)
 };
@@ -31,13 +31,13 @@ const player = {
     x: 0,                 // Player x offset from center (-1 to 1)
     z: 0,                 // Player position along the road
     speed: 0,             // Current speed
-    maxSpeed: 300,
-    accel: 25,
-    braking: 60,
-    decel: 20,
-    offRoadDecel: 60,
+    maxSpeed: 500,        // Faster max speed
+    accel: 150,           // Much faster acceleration
+    braking: 200,         // Faster braking
+    decel: 30,            // Slower natural deceleration
+    offRoadDecel: 80,
     offRoadLimit: 0.3,
-    turnSpeed: 3
+    turnSpeed: 5          // Faster turning
 };
 
 // Road segments
@@ -56,30 +56,32 @@ const colors = {
 function buildRoad() {
     segments.length = 0;
     
-    // Create a simple road with some curves
-    const roadLength = 500;
+    // Create a longer road with gentle curves
+    const roadLength = 1000;
     
     for (let i = 0; i < roadLength; i++) {
-        // Add curves
+        // Smoother, gentler curves
         let curve = 0;
-        if (i > 50 && i < 100) curve = 2;       // Right turn
-        if (i > 150 && i < 200) curve = -3;     // Left turn
-        if (i > 250 && i < 300) curve = 4;      // Sharp right
-        if (i > 350 && i < 400) curve = -2;     // Left turn
-        if (i > 450 && i < 480) curve = 5;      // Sharp right
+        if (i > 50 && i < 150) curve = 1.5;       // Gentle right
+        if (i > 200 && i < 350) curve = -2;       // Left curve
+        if (i > 400 && i < 500) curve = 2.5;      // Right curve
+        if (i > 550 && i < 650) curve = -1.5;     // Gentle left
+        if (i > 700 && i < 800) curve = 1;        // Slight right
+        if (i > 850 && i < 950) curve = -2;       // Left curve
         
-        // Add hills
+        // Gentler hills
         let y = 0;
-        if (i > 80 && i < 120) y = Math.sin((i - 80) * Math.PI / 40) * 2000;
-        if (i > 200 && i < 250) y = Math.sin((i - 200) * Math.PI / 50) * 1500;
-        if (i > 300 && i < 350) y = -Math.sin((i - 300) * Math.PI / 50) * 1000;
+        if (i > 100 && i < 180) y = Math.sin((i - 100) * Math.PI / 80) * 1000;
+        if (i > 300 && i < 400) y = Math.sin((i - 300) * Math.PI / 100) * 800;
+        if (i > 500 && i < 600) y = -Math.sin((i - 500) * Math.PI / 100) * 600;
+        if (i > 750 && i < 850) y = Math.sin((i - 750) * Math.PI / 100) * 500;
         
         segments.push({
             index: i,
             p1: { world: { z: i * road.segmentLength, y: y }, camera: {}, screen: {} },
             p2: { world: { z: (i + 1) * road.segmentLength, y: y }, camera: {}, screen: {} },
             curve: curve,
-            color: Math.floor(i / road.rumbleLength) % 2 ? 
+            color: Math.floor(i / road.rumbleLength) % 2 ?
                 { road: colors.road.dark, grass: colors.grass.dark, rumble: colors.rumble.dark } :
                 { road: colors.road.light, grass: colors.grass.light, rumble: colors.rumble.light }
         });
