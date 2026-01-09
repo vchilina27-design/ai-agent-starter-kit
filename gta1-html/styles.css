@@ -35,3 +35,98 @@ body {
 .controls-hint strong {
     color: #aaa;
 }
+
+/* Mobile Controls */
+.mobile-controls {
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 800px;
+    padding: 20px;
+    gap: 20px;
+}
+
+/* Show mobile controls on touch devices */
+@media (pointer: coarse), (max-width: 768px) {
+    .mobile-controls {
+        display: flex;
+    }
+    
+    .controls-hint {
+        display: none;
+    }
+    
+    #gameCanvas {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+.dpad {
+    display: grid;
+    grid-template-areas:
+        ". up ."
+        "left . right"
+        ". down .";
+    grid-template-columns: repeat(3, 60px);
+    grid-template-rows: repeat(3, 60px);
+    gap: 5px;
+}
+
+.dpad-btn {
+    width: 60px;
+    height: 60px;
+    border: none;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background-color 0.1s;
+}
+
+.dpad-btn:active,
+.dpad-btn.active {
+    background-color: rgba(100, 200, 255, 0.6);
+}
+
+.dpad-btn.up {
+    grid-area: up;
+}
+
+.dpad-btn.left {
+    grid-area: left;
+}
+
+.dpad-btn.right {
+    grid-area: right;
+}
+
+.dpad-btn.down {
+    grid-area: down;
+}
+
+.handbrake-btn {
+    width: 100px;
+    height: 100px;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(255, 100, 100, 0.4);
+    color: #fff;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background-color 0.1s;
+}
+
+.handbrake-btn:active,
+.handbrake-btn.active {
+    background-color: rgba(255, 100, 100, 0.8);
+}

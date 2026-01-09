@@ -84,6 +84,83 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
+// Mobile touch controls
+function setupMobileControls() {
+    const buttons = document.querySelectorAll('.dpad-btn, .handbrake-btn');
+    
+    buttons.forEach(button => {
+        const key = button.dataset.key;
+        
+        // Touch start - activate control
+        button.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            button.classList.add('active');
+            if (key === 'space') {
+                keys.space = true;
+            } else {
+                keys[key] = true;
+            }
+        }, { passive: false });
+        
+        // Touch end - deactivate control
+        button.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            button.classList.remove('active');
+            if (key === 'space') {
+                keys.space = false;
+            } else {
+                keys[key] = false;
+            }
+        }, { passive: false });
+        
+        // Touch cancel - deactivate control
+        button.addEventListener('touchcancel', (e) => {
+            button.classList.remove('active');
+            if (key === 'space') {
+                keys.space = false;
+            } else {
+                keys[key] = false;
+            }
+        });
+        
+        // Mouse events for testing on desktop
+        button.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            button.classList.add('active');
+            if (key === 'space') {
+                keys.space = true;
+            } else {
+                keys[key] = true;
+            }
+        });
+        
+        button.addEventListener('mouseup', (e) => {
+            button.classList.remove('active');
+            if (key === 'space') {
+                keys.space = false;
+            } else {
+                keys[key] = false;
+            }
+        });
+        
+        button.addEventListener('mouseleave', (e) => {
+            button.classList.remove('active');
+            if (key === 'space') {
+                keys.space = false;
+            } else {
+                keys[key] = false;
+            }
+        });
+    });
+}
+
+// Initialize mobile controls when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupMobileControls);
+} else {
+    setupMobileControls();
+}
+
 // Update car physics
 function updateCar() {
     // Calculate turn factor based on speed (slower = tighter turns)
