@@ -36,9 +36,9 @@ body {
     color: #aaa;
 }
 
-/* Mobile Controls */
+/* Mobile Controls - Always visible */
 .mobile-controls {
-    display: none;
+    display: flex;
     justify-content: space-between;
     align-items: center;
     width: 100%;
@@ -47,16 +47,8 @@ body {
     gap: 20px;
 }
 
-/* Show mobile controls on touch devices */
-@media (pointer: coarse), (max-width: 768px) {
-    .mobile-controls {
-        display: flex;
-    }
-    
-    .controls-hint {
-        display: none;
-    }
-    
+/* Responsive canvas */
+@media (max-width: 768px) {
     #gameCanvas {
         max-width: 100%;
         height: auto;
