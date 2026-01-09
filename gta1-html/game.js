@@ -1,5 +1,5 @@
-// GTA 1 Style Driving MVP
-// A simple top-down car driving game
+// GTA 1 Style Driving - First Person View
+// Pseudo-3D racing game using 2D canvas
 
 // Canvas setup
 const canvas = document.getElementById('gameCanvas');
@@ -14,25 +14,311 @@ const keys = {
     space: false
 };
 
-// Car properties
-const car = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    rotation: -Math.PI / 2,  // Start facing up
-    speed: 0,
-    
-    // Physics tuning
-    maxSpeed: 6,
-    acceleration: 0.12,
-    braking: 0.18,
-    friction: 0.02,
-    turnSpeed: 0.05,
-    handbrakeMultiplier: 0.96,
-    
-    // Dimensions
-    width: 40,
-    height: 20
+// Road parameters
+const road = {
+    width: 2000,          // Road width in world units
+    segmentLength: 200,   // Length of each road segment
+    rumbleLength: 3,      // Number of segments per rumble strip
+    lanes: 3,             // Number of lanes
+    drawDistance: 100,    // How many segments to draw
+    fogDensity: 5,        // Fog density
+    cameraHeight: 1000,   // Camera height above road
+    cameraDepth: 0.84     // Camera depth (field of view)
 };
+
+// Player car
+const player = {
+    x: 0,                 // Player x offset from center (-1 to 1)
+    z: 0,                 // Player position along the road
+    speed: 0,             // Current speed
+    maxSpeed: 300,
+    accel: 25,
+    braking: 60,
+    decel: 20,
+    offRoadDecel: 60,
+    offRoadLimit: 0.3,
+    turnSpeed: 3
+};
+
+// Road segments
+const segments = [];
+const colors = {
+    sky: '#72d7ee',
+    tree: '#005108',
+    fog: '#aaccdd',
+    road: { dark: '#696969', light: '#6b6b6b' },
+    grass: { dark: '#10aa10', light: '#009a00' },
+    rumble: { dark: '#555555', light: '#bbbbbb' },
+    lane: '#cccccc'
+};
+
+// Build the road
+function buildRoad() {
+    segments.length = 0;
+    
+    // Create a simple road with some curves
+    const roadLength = 500;
+    
+    for (let i = 0; i < roadLength; i++) {
+        // Add curves
+        let curve = 0;
+        if (i > 50 && i < 100) curve = 2;       // Right turn
+        if (i > 150 && i < 200) curve = -3;     // Left turn
+        if (i > 250 && i < 300) curve = 4;      // Sharp right
+        if (i > 350 && i < 400) curve = -2;     // Left turn
+        if (i > 450 && i < 480) curve = 5;      // Sharp right
+        
+        // Add hills
+        let y = 0;
+        if (i > 80 && i < 120) y = Math.sin((i - 80) * Math.PI / 40) * 2000;
+        if (i > 200 && i < 250) y = Math.sin((i - 200) * Math.PI / 50) * 1500;
+        if (i > 300 && i < 350) y = -Math.sin((i - 300) * Math.PI / 50) * 1000;
+        
+        segments.push({
+            index: i,
+            p1: { world: { z: i * road.segmentLength, y: y }, camera: {}, screen: {} },
+            p2: { world: { z: (i + 1) * road.segmentLength, y: y }, camera: {}, screen: {} },
+            curve: curve,
+            color: Math.floor(i / road.rumbleLength) % 2 ? 
+                { road: colors.road.dark, grass: colors.grass.dark, rumble: colors.rumble.dark } :
+                { road: colors.road.light, grass: colors.grass.light, rumble: colors.rumble.light }
+        });
+    }
+    
+    // Make it loop
+    segments[segments.length - 1].p2.world.z = 0;
+}
+
+// Project 3D point to 2D screen
+function project(p, cameraX, cameraY, cameraZ, cameraDepth) {
+    p.camera.x = (p.world.x || 0) - cameraX;
+    p.camera.y = (p.world.y || 0) - cameraY;
+    p.camera.z = (p.world.z || 0) - cameraZ;
+    
+    const scale = cameraDepth / p.camera.z;
+    p.screen.scale = scale;
+    p.screen.x = Math.round(canvas.width / 2 + scale * p.camera.x * canvas.width / 2);
+    p.screen.y = Math.round(canvas.height / 2 - scale * p.camera.y * canvas.height / 2);
+    p.screen.w = Math.round(scale * road.width * canvas.width / 2);
+}
+
+// Get segment at position
+function findSegment(z) {
+    return segments[Math.floor(z / road.segmentLength) % segments.length];
+}
+
+// Draw a polygon
+function polygon(ctx, x1, y1, x2, y2, x3, y3, x4, y4, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.lineTo(x4, y4);
+    ctx.closePath();
+    ctx.fill();
+}
+
+// Render the road
+function renderRoad() {
+    const baseSegment = findSegment(player.z);
+    const basePercent = (player.z % road.segmentLength) / road.segmentLength;
+    const playerSegment = findSegment(player.z + road.cameraHeight);
+    const playerPercent = ((player.z + road.cameraHeight) % road.segmentLength) / road.segmentLength;
+    const playerY = playerSegment.p1.world.y + (playerSegment.p2.world.y - playerSegment.p1.world.y) * playerPercent;
+    
+    let maxy = canvas.height;
+    let x = 0;
+    let dx = -(baseSegment.curve * basePercent);
+    
+    // Clear sky
+    ctx.fillStyle = colors.sky;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw horizon mountains/background
+    ctx.fillStyle = '#4a8f4a';
+    ctx.fillRect(0, canvas.height / 2 - 50, canvas.width, 100);
+    
+    // Draw segments from back to front
+    for (let n = 0; n < road.drawDistance; n++) {
+        const index = (baseSegment.index + n) % segments.length;
+        const segment = segments[index];
+        const looped = segment.index < baseSegment.index;
+        const fog = 1 / (1 + n * n * road.fogDensity * 0.00001);
+        
+        // Calculate road position
+        const p1Z = looped ? segment.p1.world.z + segments.length * road.segmentLength : segment.p1.world.z;
+        const p2Z = looped ? segment.p2.world.z + segments.length * road.segmentLength : segment.p2.world.z;
+        
+        // Project points
+        segment.p1.world.x = x;
+        project(segment.p1, player.x * road.width, playerY + road.cameraHeight, player.z, road.cameraDepth);
+        
+        x += dx;
+        dx += segment.curve;
+        
+        segment.p2.world.x = x;
+        project(segment.p2, player.x * road.width, playerY + road.cameraHeight, player.z, road.cameraDepth);
+        
+        // Skip if behind camera or above screen
+        if (segment.p1.camera.z <= road.cameraDepth || segment.p2.screen.y >= maxy) continue;
+        
+        // Draw grass
+        polygon(ctx,
+            0, segment.p2.screen.y,
+            canvas.width, segment.p2.screen.y,
+            canvas.width, segment.p1.screen.y,
+            0, segment.p1.screen.y,
+            segment.color.grass);
+        
+        // Draw rumble strips
+        const rumbleW1 = segment.p1.screen.w * 1.15;
+        const rumbleW2 = segment.p2.screen.w * 1.15;
+        polygon(ctx,
+            segment.p1.screen.x - rumbleW1, segment.p1.screen.y,
+            segment.p1.screen.x + rumbleW1, segment.p1.screen.y,
+            segment.p2.screen.x + rumbleW2, segment.p2.screen.y,
+            segment.p2.screen.x - rumbleW2, segment.p2.screen.y,
+            segment.color.rumble);
+        
+        // Draw road
+        polygon(ctx,
+            segment.p1.screen.x - segment.p1.screen.w, segment.p1.screen.y,
+            segment.p1.screen.x + segment.p1.screen.w, segment.p1.screen.y,
+            segment.p2.screen.x + segment.p2.screen.w, segment.p2.screen.y,
+            segment.p2.screen.x - segment.p2.screen.w, segment.p2.screen.y,
+            segment.color.road);
+        
+        // Draw lane markings
+        if (Math.floor(index / road.rumbleLength) % 2 === 0) {
+            const laneW1 = segment.p1.screen.w * 0.02;
+            const laneW2 = segment.p2.screen.w * 0.02;
+            const laneX1 = segment.p1.screen.w * 0.33;
+            const laneX2 = segment.p2.screen.w * 0.33;
+            
+            // Left lane marker
+            polygon(ctx,
+                segment.p1.screen.x - laneX1 - laneW1, segment.p1.screen.y,
+                segment.p1.screen.x - laneX1 + laneW1, segment.p1.screen.y,
+                segment.p2.screen.x - laneX2 + laneW2, segment.p2.screen.y,
+                segment.p2.screen.x - laneX2 - laneW2, segment.p2.screen.y,
+                colors.lane);
+            
+            // Right lane marker
+            polygon(ctx,
+                segment.p1.screen.x + laneX1 - laneW1, segment.p1.screen.y,
+                segment.p1.screen.x + laneX1 + laneW1, segment.p1.screen.y,
+                segment.p2.screen.x + laneX2 + laneW2, segment.p2.screen.y,
+                segment.p2.screen.x + laneX2 - laneW2, segment.p2.screen.y,
+                colors.lane);
+        }
+        
+        maxy = segment.p2.screen.y;
+    }
+}
+
+// Draw car dashboard/hood
+function drawCar() {
+    // Simple car hood at bottom of screen
+    ctx.fillStyle = '#2266dd';
+    ctx.beginPath();
+    ctx.moveTo(canvas.width * 0.2, canvas.height);
+    ctx.lineTo(canvas.width * 0.35, canvas.height - 60);
+    ctx.lineTo(canvas.width * 0.65, canvas.height - 60);
+    ctx.lineTo(canvas.width * 0.8, canvas.height);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Hood shine
+    ctx.fillStyle = '#3388ff';
+    ctx.beginPath();
+    ctx.moveTo(canvas.width * 0.3, canvas.height);
+    ctx.lineTo(canvas.width * 0.4, canvas.height - 40);
+    ctx.lineTo(canvas.width * 0.6, canvas.height - 40);
+    ctx.lineTo(canvas.width * 0.7, canvas.height);
+    ctx.closePath();
+    ctx.fill();
+}
+
+// Draw UI
+function drawUI() {
+    const speedMPH = Math.round(player.speed / player.maxSpeed * 120);
+    
+    // Speed display
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(10, 10, 140, 50);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText('SPEED', 20, 32);
+    
+    ctx.fillStyle = '#66ff66';
+    ctx.font = 'bold 24px monospace';
+    ctx.fillText(speedMPH + ' mph', 20, 54);
+    
+    // Handbrake indicator
+    if (keys.space) {
+        ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+        ctx.fillRect(160, 10, 100, 30);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('HANDBRAKE', 168, 30);
+    }
+}
+
+// Update game logic
+function update(dt) {
+    const segment = findSegment(player.z + road.cameraHeight);
+    const speedPercent = player.speed / player.maxSpeed;
+    const dx = dt * player.turnSpeed * speedPercent;
+    
+    // Steering
+    if (keys.left) player.x -= dx;
+    if (keys.right) player.x += dx;
+    
+    // Follow road curves
+    player.x -= dx * speedPercent * segment.curve * 0.1;
+    
+    // Acceleration and braking
+    if (keys.up) {
+        player.speed += player.accel * dt;
+    } else if (keys.down) {
+        player.speed -= player.braking * dt;
+    } else {
+        player.speed -= player.decel * dt;
+    }
+    
+    // Handbrake
+    if (keys.space && player.speed > 0) {
+        player.speed *= 0.95;
+        if (keys.left) player.x -= dx * 2;
+        if (keys.right) player.x += dx * 2;
+    }
+    
+    // Off-road penalty
+    if (Math.abs(player.x) > 0.8 && player.speed > player.offRoadLimit * player.maxSpeed) {
+        player.speed -= player.offRoadDecel * dt;
+    }
+    
+    // Clamp values
+    player.speed = Math.max(0, Math.min(player.speed, player.maxSpeed));
+    player.x = Math.max(-2, Math.min(2, player.x));
+    
+    // Move forward
+    player.z += player.speed * dt;
+    
+    // Loop road
+    const trackLength = segments.length * road.segmentLength;
+    while (player.z >= trackLength) player.z -= trackLength;
+    while (player.z < 0) player.z += trackLength;
+}
+
+// Main render function
+function render() {
+    renderRoad();
+    drawCar();
+    drawUI();
+}
 
 // Keyboard event listeners
 document.addEventListener('keydown', (e) => {
@@ -91,7 +377,6 @@ function setupMobileControls() {
     buttons.forEach(button => {
         const key = button.dataset.key;
         
-        // Touch start - activate control
         button.addEventListener('touchstart', (e) => {
             e.preventDefault();
             button.classList.add('active');
@@ -102,7 +387,6 @@ function setupMobileControls() {
             }
         }, { passive: false });
         
-        // Touch end - deactivate control
         button.addEventListener('touchend', (e) => {
             e.preventDefault();
             button.classList.remove('active');
@@ -113,7 +397,6 @@ function setupMobileControls() {
             }
         }, { passive: false });
         
-        // Touch cancel - deactivate control
         button.addEventListener('touchcancel', (e) => {
             button.classList.remove('active');
             if (key === 'space') {
@@ -123,7 +406,6 @@ function setupMobileControls() {
             }
         });
         
-        // Mouse events for testing on desktop
         button.addEventListener('mousedown', (e) => {
             e.preventDefault();
             button.classList.add('active');
@@ -154,172 +436,26 @@ function setupMobileControls() {
     });
 }
 
-// Initialize mobile controls when DOM is ready
+// Initialize mobile controls
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setupMobileControls);
 } else {
     setupMobileControls();
 }
 
-// Update car physics
-function updateCar() {
-    // Calculate turn factor based on speed (slower = tighter turns)
-    const speedRatio = Math.abs(car.speed) / car.maxSpeed;
-    const turnFactor = speedRatio * 0.8 + 0.2;  // Min 20% turn ability
+// Game loop
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
     
-    // Steering - only effective when moving
-    if (car.speed !== 0) {
-        const turnDirection = car.speed > 0 ? 1 : -1;
-        if (keys.left) {
-            car.rotation -= car.turnSpeed * turnFactor * turnDirection;
-        }
-        if (keys.right) {
-            car.rotation += car.turnSpeed * turnFactor * turnDirection;
-        }
-    }
-    
-    // Acceleration and braking
-    if (keys.up) {
-        car.speed += car.acceleration;
-    } else if (keys.down) {
-        if (car.speed > 0) {
-            // Braking when moving forward
-            car.speed -= car.braking;
-        } else {
-            // Reversing
-            car.speed -= car.acceleration * 0.6;
-        }
-    } else {
-        // Apply friction when no input
-        if (Math.abs(car.speed) > car.friction) {
-            car.speed -= Math.sign(car.speed) * car.friction;
-        } else {
-            car.speed = 0;
-        }
-    }
-    
-    // Handbrake - allows sliding/drifting
-    if (keys.space && Math.abs(car.speed) > 0.5) {
-        car.speed *= car.handbrakeMultiplier;
-        // Add extra turning when handbraking
-        if (keys.left) {
-            car.rotation -= car.turnSpeed * 1.5;
-        }
-        if (keys.right) {
-            car.rotation += car.turnSpeed * 1.5;
-        }
-    }
-    
-    // Clamp speed
-    car.speed = Math.max(-car.maxSpeed * 0.4, Math.min(car.speed, car.maxSpeed));
-    
-    // Update position based on rotation
-    car.x += Math.cos(car.rotation) * car.speed;
-    car.y += Math.sin(car.rotation) * car.speed;
-    
-    // Wrap around screen edges
-    if (car.x < -car.width) car.x = canvas.width + car.width;
-    if (car.x > canvas.width + car.width) car.x = -car.width;
-    if (car.y < -car.height) car.y = canvas.height + car.height;
-    if (car.y > canvas.height + car.height) car.y = -car.height;
-}
-
-// Render the game
-function render() {
-    // Clear canvas with road color
-    ctx.fillStyle = '#3d3d3d';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw road markings (simple dashed lines)
-    ctx.strokeStyle = '#5a5a5a';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([20, 20]);
-    
-    // Horizontal lines
-    for (let y = 100; y < canvas.height; y += 150) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-    }
-    
-    // Vertical lines
-    for (let x = 100; x < canvas.width; x += 150) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-    }
-    
-    ctx.setLineDash([]);
-    
-    // Draw car
-    ctx.save();
-    ctx.translate(car.x, car.y);
-    ctx.rotate(car.rotation);
-    
-    // Car shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.fillRect(-car.width/2 + 3, -car.height/2 + 3, car.width, car.height);
-    
-    // Car body (blue)
-    ctx.fillStyle = '#2266dd';
-    ctx.fillRect(-car.width/2, -car.height/2, car.width, car.height);
-    
-    // Car roof (darker blue)
-    ctx.fillStyle = '#1a4fa8';
-    ctx.fillRect(-car.width/4, -car.height/3, car.width/2, car.height/1.5);
-    
-    // Front lights (yellow)
-    ctx.fillStyle = '#ffdd00';
-    ctx.fillRect(car.width/2 - 4, -car.height/2 + 2, 4, 4);
-    ctx.fillRect(car.width/2 - 4, car.height/2 - 6, 4, 4);
-    
-    // Rear lights (red)
-    ctx.fillStyle = '#ff3333';
-    ctx.fillRect(-car.width/2, -car.height/2 + 2, 3, 4);
-    ctx.fillRect(-car.width/2, car.height/2 - 6, 3, 4);
-    
-    ctx.restore();
-    
-    // Draw UI
-    drawUI();
-}
-
-// Draw user interface
-function drawUI() {
-    // Speed display
-    const speedMPH = Math.abs(Math.round(car.speed * 15));
-    const direction = car.speed < 0 ? ' (R)' : '';
-    
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(10, 10, 140, 50);
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px monospace';
-    ctx.fillText('SPEED', 20, 32);
-    
-    ctx.fillStyle = car.speed < 0 ? '#ff6666' : '#66ff66';
-    ctx.font = 'bold 24px monospace';
-    ctx.fillText(speedMPH + ' mph' + direction, 20, 54);
-    
-    // Handbrake indicator
-    if (keys.space) {
-        ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
-        ctx.fillRect(160, 10, 100, 30);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 16px monospace';
-        ctx.fillText('HANDBRAKE', 168, 30);
-    }
-}
-
-// Main game loop
-function gameLoop() {
-    updateCar();
+    update(dt);
     render();
+    
     requestAnimationFrame(gameLoop);
 }
 
 // Start the game
-console.log('GTA 1 Style Driving MVP - Starting...');
-gameLoop();
+console.log('GTA 1 Style - First Person View - Starting...');
+buildRoad();
+requestAnimationFrame(gameLoop);
